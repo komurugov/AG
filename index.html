@@ -3,36 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Auto-Gallery - Accelerated Movement</title>
+    <title>Optimized 3D Gallery</title>
     <style>
         body { margin: 0; overflow: hidden; background: #ffffff; font-family: sans-serif; touch-action: none; }
         #instructions {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(255,255,255,0.95); padding: 30px; border-radius: 15px;
-            text-align: center; z-index: 1000; box-shadow: 0 10px 40px rgba(0,0,0,0.2); 
-            width: 85%; max-width: 320px;
-        }
-        #joystick-wrapper {
-            position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px;
-            background: rgba(0,0,0,0.05); border-radius: 50%; display: none; z-index: 20; border: 1px solid #ddd;
-        }
-        #joystick-knob {
-            position: absolute; top: 35px; left: 35px; width: 50px; height: 50px;
-            background: #333; border-radius: 50%;
+            text-align: center; z-index: 1000; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 85%; max-width: 320px;
         }
         #start-btn { display: none; margin-top: 20px; padding: 15px 30px; background: #000; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
-        /* SPEED INDICATOR (Optional) */
-        #speed-ui {
-            position: absolute; top: 20px; right: 20px; font-family: monospace;
-            background: rgba(0,0,0,0.5); color: #fff; padding: 5px 10px; border-radius: 5px;
-            font-size: 12px; pointer-events: none; display: none;
-        }
+        #speed-ui { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.5); color: #fff; padding: 5px 10px; border-radius: 5px; font-size: 12px; pointer-events: none; }
+        #joystick-wrapper { position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px; background: rgba(0,0,0,0.05); border-radius: 50%; display: none; z-index: 20; border: 1px solid #ddd; }
+        #joystick-knob { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: #333; border-radius: 50%; }
     </style>
 </head>
 <body>
     <div id="instructions">
-        <h2 style="margin-top:0">Art Gallery acceleration</h2>
-        <p id="status-text">Scanning for photos...</p>
+        <h2>Art Gallery optimize</h2>
+        <p id="status-text">Optimizing Assets...</p>
         <button id="start-btn">ENTER</button>
     </div>
     <div id="speed-ui">Speed: 1.0x</div>
@@ -46,44 +34,45 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-        // --- CONFIG ---
+        // --- SETTINGS ---
         const GITHUB_USERNAME = 'komurugov';
         const REPO_NAME = 'AG';
-        const BASE_MOVE_SPEED = 0.07; // Original speed
-        const MAX_MULTIPLIER = 3.0;   // Triple speed
-        const RAMP_TIME = 2000;       // 2 seconds in milliseconds
+        const BASE_MOVE_SPEED = 0.08;
+        const LOAD_DISTANCE = 20; // Load texture when closer than this
+        const UNLOAD_DISTANCE = 40; // Wipe memory when further than this
 
-        let moveStartTime = null;     // Tracks when movement started
+        // --- STATE ---
         let OUTER_LIMIT, INNER_LIMIT;
-        
+        let artPieces = []; // Store references for memory management
+        let moveStartTime = null;
+        let moveState = { f: 0, r: 0 };
+
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xfafafa);
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.rotation.order = 'YXZ';
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap pixel ratio for performance
         document.body.appendChild(renderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.6));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
+        scene.add(hemi);
 
         const loader = new THREE.TextureLoader();
-        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         const controls = new PointerLockControls(camera, document.body);
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-        // --- UI & START ---
-        const startBtn = document.getElementById('start-btn');
-        startBtn.addEventListener('click', () => {
+        // --- START LOGIC ---
+        document.getElementById('start-btn').addEventListener('click', () => {
             document.getElementById('instructions').style.display = 'none';
-            document.getElementById('speed-ui').style.display = 'block';
             if (!isMobile) controls.lock();
             else document.getElementById('joystick-wrapper').style.display = 'block';
         });
 
-        // --- DYNAMIC GENERATOR & ARCHITECTURE ---
-        // (Functionality same as previous version)
+        // --- MEMORY-EFFICIENT GALLERY BUILDER ---
         async function initGallery() {
             const status = document.getElementById('status-text');
             try {
@@ -93,123 +82,140 @@
 
                 const count = images.length || 4;
                 const ipw = Math.ceil(count / 4);
-                const wallLength = (ipw + 1) * 7; // Spacing
+                const wallLength = (ipw + 1) * 7;
                 
                 OUTER_LIMIT = wallLength / 2;
-                INNER_LIMIT = OUTER_LIMIT - 8; // Hallway Width
+                INNER_LIMIT = OUTER_LIMIT - 8;
 
-                buildEnvironment(wallLength);
-                placeImages(images, ipw, wallLength);
+                buildArchitecture(wallLength);
+                
+                // Create "Slots" for the art (don't load textures yet)
+                images.forEach((file, i) => {
+                    const wallIdx = Math.floor(i / ipw);
+                    const posInWall = (i % ipw) - (ipw - 1) / 2;
+                    let x=0, z=0, rot=0;
+                    const coord = posInWall * 7;
+                    if (wallIdx === 0) { x = coord; z = -OUTER_LIMIT + 0.05; rot = 0; }
+                    else if (wallIdx === 1) { x = OUTER_LIMIT - 0.05; z = coord; rot = -Math.PI/2; }
+                    else if (wallIdx === 2) { x = -coord; z = OUTER_LIMIT - 0.05; rot = Math.PI; }
+                    else if (wallIdx === 3) { x = -OUTER_LIMIT + 0.05; z = -coord; rot = Math.PI/2; }
+                    
+                    createArtSlot(file, x, z, rot);
+                });
 
                 camera.position.set(0, 1.7, -OUTER_LIMIT + 4);
-                status.innerText = `Ready! ${count} photos found.`;
-                startBtn.style.display = 'inline-block';
-            } catch (e) { status.innerText = "Error."; }
+                status.innerText = `Gallery Built (${count} Slots)`;
+                document.getElementById('start-btn').style.display = 'inline-block';
+            } catch (e) { status.innerText = "Error loading files."; }
         }
 
-        function buildEnvironment(size) {
-            const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+        function buildArchitecture(size) {
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
             const wall = (w, x, z, r) => {
-                const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 6), mat);
+                const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 6), wallMat);
                 m.position.set(x, 3, z); m.rotation.y = r; scene.add(m);
             };
+            // Outer & Inner Walls
             wall(size, 0, -OUTER_LIMIT, 0); wall(size, 0, OUTER_LIMIT, 0);
             wall(size, -OUTER_LIMIT, 0, Math.PI/2); wall(size, OUTER_LIMIT, 0, Math.PI/2);
             const inS = size - 16;
             wall(inS, 0, -INNER_LIMIT, 0); wall(inS, 0, INNER_LIMIT, 0);
             wall(inS, -INNER_LIMIT, 0, Math.PI/2); wall(inS, INNER_LIMIT, 0, Math.PI/2);
+            // Floor
             const floor = new THREE.Mesh(new THREE.PlaneGeometry(size*2, size*2), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
             floor.rotation.x = -Math.PI/2; scene.add(floor);
         }
 
-        function placeImages(files, ipw, size) {
-            files.forEach((file, i) => {
-                const wallIdx = Math.floor(i / ipw);
-                const posInWall = (i % ipw) - (ipw - 1) / 2;
-                let x=0, z=0, rot=0;
-                const dist = OUTER_LIMIT - 0.05;
-                const coord = posInWall * 7;
-                if (wallIdx === 0) { x = coord; z = -dist; rot = 0; }
-                else if (wallIdx === 1) { x = dist; z = coord; rot = -Math.PI/2; }
-                else if (wallIdx === 2) { x = -coord; z = dist; rot = Math.PI; }
-                else if (wallIdx === 3) { x = -dist; z = -coord; rot = Math.PI/2; }
-                loader.load(file, (tex) => {
-                    const m = new THREE.Mesh(new THREE.PlaneGeometry(3, 4), new THREE.MeshStandardMaterial({ map: tex }));
-                    m.position.set(x, 2.5, z); m.rotation.y = rot; scene.add(m);
-                    const s = new THREE.PointLight(0xffffff, 8, 15);
-                    s.position.set(x + Math.sin(rot)*2, 4, z + Math.cos(rot)*2); scene.add(s);
-                });
+        function createArtSlot(file, x, z, rot) {
+            // Create a simple grey placeholder geometry
+            const geo = new THREE.PlaneGeometry(3, 4);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xcccccc }); // Starts grey
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, 2.5, z);
+            mesh.rotation.y = rot;
+            scene.add(mesh);
+
+            // Create light (disabled by default)
+            const spot = new THREE.PointLight(0xffffff, 0, 15);
+            spot.position.set(x + Math.sin(rot)*2, 4, z + Math.cos(rot)*2);
+            scene.add(spot);
+
+            artPieces.push({
+                file: file,
+                mesh: mesh,
+                light: spot,
+                isLoaded: false
             });
         }
 
-        // --- MOVEMENT ENGINE ---
-        let moveState = { f: 0, r: 0 };
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'KeyW') moveState.f = 1; if (e.code === 'KeyS') moveState.f = -1;
-            if (e.code === 'KeyA') moveState.r = -1; if (e.code === 'KeyD') moveState.r = 1;
-        });
-        window.addEventListener('keyup', (e) => {
-            if (['KeyW', 'KeyS'].includes(e.code)) moveState.f = 0;
-            if (['KeyA', 'KeyD'].includes(e.code)) moveState.r = 0;
-        });
+        // --- THE OPTIMIZER LOOP ---
+        function updateAssets() {
+            artPieces.forEach(art => {
+                const dist = camera.position.distanceTo(art.mesh.position);
 
-        // Touch logic for mobile (Inversed & Vertical)
-        let lastX = null, lastY = null;
-        document.addEventListener('touchstart', (e) => {
-            const t = e.touches[0];
-            if (t.clientX > 150) { lastX = t.clientX; lastY = t.clientY; }
-        });
-        document.addEventListener('touchmove', (e) => {
-            const t = Array.from(e.touches).find(touch => touch.clientX > 150) || e.touches[0];
-            if (lastX !== null) {
-                camera.rotation.y += (t.clientX - lastX) * 0.006;
-                camera.rotation.x += (t.clientY - lastY) * 0.006;
-                camera.rotation.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, camera.rotation.x));
-                lastX = t.clientX; lastY = t.clientY;
-            }
-        });
-        document.addEventListener('touchend', () => { lastX = null; lastY = null; });
+                // LOAD: Within range and not loaded
+                if (dist < LOAD_DISTANCE && !art.isLoaded) {
+                    art.isLoaded = true;
+                    loader.load(art.file, (tex) => {
+                        art.mesh.material.map = tex;
+                        art.mesh.material.color.set(0xffffff); // Remove grey tint
+                        art.mesh.material.needsUpdate = true;
+                        art.light.intensity = 8;
+                    });
+                }
+                
+                // UNLOAD: Out of range and is loaded
+                if (dist > UNLOAD_DISTANCE && art.isLoaded) {
+                    art.isLoaded = false;
+                    art.light.intensity = 0;
+                    
+                    // DISPOSE TEXTURE TO FREE MEMORY
+                    if (art.mesh.material.map) {
+                        art.mesh.material.map.dispose();
+                        art.mesh.material.map = null;
+                        art.mesh.material.color.set(0xcccccc);
+                        art.mesh.material.needsUpdate = true;
+                    }
+                    console.log("Memory Cleared for:", art.file);
+                }
+            });
+        }
 
+        // --- ENGINE & MOVEMENT ---
         function animate() {
             requestAnimationFrame(animate);
             
-            const moving = moveState.f !== 0 || moveState.r !== 0;
-
-            if (moving) {
-                // START TIMER ON FIRST STEP
+            if (moveState.f !== 0 || moveState.r !== 0) {
                 if (moveStartTime === null) moveStartTime = performance.now();
-
                 const elapsed = performance.now() - moveStartTime;
-                
-                // RAMP UP CALCULATION
-                // 1.0 (start) -> 3.0 (after 2s)
-                const multiplier = Math.min(MAX_MULTIPLIER, 1 + (elapsed / RAMP_TIME) * (MAX_MULTIPLIER - 1));
-                const currentSpeed = BASE_MOVE_SPEED * multiplier;
-
-                // Update UI
+                const multiplier = Math.min(3.0, 1 + (elapsed / 2000) * 2);
+                const speed = BASE_MOVE_SPEED * multiplier;
                 document.getElementById('speed-ui').innerText = `Speed: ${multiplier.toFixed(1)}x`;
 
                 const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
                 const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
                 const nextPos = camera.position.clone();
-                nextPos.addScaledVector(dir, moveState.f * currentSpeed);
-                nextPos.addScaledVector(side, -moveState.r * currentSpeed);
+                nextPos.addScaledVector(dir, moveState.f * speed);
+                nextPos.addScaledVector(side, -moveState.r * speed);
 
                 const absX = Math.abs(nextPos.x), absZ = Math.abs(nextPos.z);
-                const isCorrectRing = (absX > INNER_LIMIT + 0.5 && absX < OUTER_LIMIT - 0.5) || (absZ > INNER_LIMIT + 0.5 && absZ < OUTER_LIMIT - 0.5);
-                if (isCorrectRing && absX < OUTER_LIMIT - 0.5 && absZ < OUTER_LIMIT - 0.5) camera.position.copy(nextPos);
-
-            } else {
-                // RESET ON STOP
-                moveStartTime = null;
-                document.getElementById('speed-ui').innerText = `Speed: 1.0x`;
+                if (((absX > INNER_LIMIT + 0.5 && absX < OUTER_LIMIT - 0.5) || (absZ > INNER_LIMIT + 0.5 && absZ < OUTER_LIMIT - 0.5)) && absX < OUTER_LIMIT - 0.5 && absZ < OUTER_LIMIT - 0.5) {
+                    camera.position.copy(nextPos);
+                }
+                
+                updateAssets(); // Run optimization only when moving
             }
 
             renderer.render(scene, camera);
         }
 
-        initGallery(); animate();
-        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
-    </script>
-</body>
-</html>
+        // Input Setup
+        window.addEventListener('keydown', (e) => { if (e.code === 'KeyW') moveState.f = 1; if (e.code === 'KeyS') moveState.f = -1; if (e.code === 'KeyA') moveState.r = -1; if (e.code === 'KeyD') moveState.r = 1; });
+        window.addEventListener('keyup', (e) => { if (['KeyW', 'KeyS'].includes(e.code)) moveState.f = 0; if (['KeyA', 'KeyD'].includes(e.code)) moveState.r = 0; if (moveState.f === 0 && moveState.r === 0) moveStartTime = null; });
+        
+        let lx=null, ly=null, jA=false, jS={x:0,y:0};
+        document.addEventListener('touchstart', (e) => { const t=e.touches[0]; if (t.clientX < 150) { jA=true; jS={x:t.clientX,y:t.clientY}; } else { lx=t.clientX; ly=t.clientY; } });
+        document.addEventListener('touchmove', (e) => {
+            const t = Array.from(e.touches).find(u => u.clientX > 150) || e.touches[0];
+            if (jA && t.clientX < window.innerWidth/2) {
+                moveState.f = -((t.clientY - jS.y)/40); moveState.r = (t
