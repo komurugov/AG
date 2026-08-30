@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Gallery - Visible Rendering</title>
+    <title>3D Gallery - Frustum Optimized</title>
     <style>
         body { margin: 0; overflow: hidden; background: #fafafa; font-family: sans-serif; touch-action: none; }
         #instructions {
@@ -23,7 +23,7 @@
 <body>
     <div id="error-log"></div>
     <div id="instructions">
-        <h2 style="margin-top:0">Julya Art Gallery</h2>
+        <h2 style="margin-top:0">Julye4ka Art Gallery</h2>
         <p id="status-text">Scanning for photos...</p>
         <button id="start-btn">ENTER GALLERY</button>
     </div>
@@ -38,12 +38,10 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-        // --- ERROR LOGGER ---
         window.onerror = (msg, url, line) => {
             document.getElementById('error-log').innerText = `Error: ${msg} [Line: ${line}]`;
         };
 
-        // --- CONFIG ---
         const GITHUB_USERNAME = 'komurugov';
         const REPO_NAME = 'AG';
         const PHOTO_SPACING = 3.5; 
@@ -51,17 +49,12 @@
         const INFINITE_LEN = 500;
         const BASE_MOVE_SPEED = 0.08;
 
-        // --- GLOBALS ---
-        let OUTER_LIMIT = 20, INNER_LIMIT = 12; 
-        let artPieces = [];
-        let moveStartTime = null, moveState = { f: 0, r: 0 };
-        let isStarted = false;
+        let OUTER_LIMIT = 20, INNER_LIMIT = 12, artPieces = [];
+        let moveStartTime = null, moveState = { f: 0, r: 0 }, isStarted = false;
 
-        // Visibility Math Objects (Reused every frame for performance)
         const frustum = new THREE.Frustum();
         const projScreenMatrix = new THREE.Matrix4();
 
-        // --- SCENE SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xfafafa);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1500);
@@ -89,12 +82,11 @@
             return array;
         }
 
-        // --- GALLERY BUILDER ---
         async function loadGallery() {
             const status = document.getElementById('status-text');
             try {
                 const res = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/`);
-                if (!res.ok) throw new Error("GitHub API Connection Failed");
+                if (!res.ok) throw new Error("GitHub API Error");
                 
                 const data = await res.json();
                 let images = data.filter(f => f.name.match(/\.(jpg|jpeg|png|webp)$/i)).map(f => f.name);
@@ -124,7 +116,6 @@
                 buildWall(inS, 6, 0, -INNER_LIMIT, 0); buildWall(inS, 6, 0, INNER_LIMIT, 0);
                 buildWall(inS, 6, -INNER_LIMIT, 0, Math.PI/2); buildWall(inS, 6, INNER_LIMIT, 0, Math.PI/2);
 
-                // Infinite Wing
                 buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, -2, 0);
                 buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, 2, 0);
                 const f2 = new THREE.Mesh(new THREE.PlaneGeometry(INFINITE_LEN, 4), new THREE.MeshStandardMaterial({color:0xdddddd}));
@@ -149,7 +140,6 @@
                     
                     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 3.5), new THREE.MeshStandardMaterial({ color: 0xcccccc }));
                     mesh.position.set(x, 2.3, z); mesh.rotation.y = rot; scene.add(mesh);
-                    // Ensure bounding box exists for frustum check
                     mesh.geometry.computeBoundingBox();
                     
                     const spot = new THREE.PointLight(0xffffff, 0, 10);
@@ -160,23 +150,20 @@
                 const floor = new THREE.Mesh(new THREE.PlaneGeometry(wallLength*3, wallLength*3), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
                 floor.rotation.x = -Math.PI/2; scene.add(floor);
 
-                camera.position.set(0, 1.7, -OUTER_LIMIT + 4);
-                status.innerText = "Photos randomized. Press Enter.";
+                camera.position.set(0, 1.7, -OUTER_LIMIT + (HALLWAY_WIDTH/2));
+                status.innerText = "Ready. Room randomized.";
                 document.getElementById('start-btn').style.display = 'block';
                 
             } catch (err) { status.innerText = "Error: " + err.message; }
         }
 
-        // --- VISIBILITY UPDATER ---
         function updateVisibility() {
-            // Update the Frustum based on current camera view
             projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-            frustum.setFromMatrix(projScreenMatrix);
+            // FIX: Modern function name is setFromProjectionMatrix
+            frustum.setFromProjectionMatrix(projScreenMatrix);
 
             artPieces.forEach(art => {
-                // Check if the photo mesh is within the camera's view (Frustum)
                 const isVisible = frustum.intersectsObject(art.mesh);
-
                 if (isVisible && !art.isLoaded) {
                     art.isLoaded = true;
                     loader.load(art.file, (t) => { 
@@ -186,7 +173,6 @@
                         art.light.intensity = 8; 
                     });
                 } else if (!isVisible && art.isLoaded) {
-                    // Unload when it leaves the field of view to save memory
                     art.isLoaded = false; 
                     art.light.intensity = 0;
                     if(art.mesh.material.map) { 
@@ -199,7 +185,6 @@
             });
         }
 
-        // --- ENGINE ---
         function animate() {
             requestAnimationFrame(animate);
             if (isStarted) {
@@ -221,8 +206,6 @@
                     
                     if (inRing || inWing) camera.position.copy(nextPos);
                 }
-                
-                // ALWAYS update visibility so distance doesn't matter, only field of view
                 updateVisibility();
             }
             renderer.render(scene, camera);
