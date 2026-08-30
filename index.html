@@ -3,29 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Gallery - Stable</title>
+    <title>3D Gallery Pro</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; touch-action: none; }
+        body { margin: 0; overflow: hidden; background: #fafafa; font-family: sans-serif; touch-action: none; }
         #instructions {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(255,255,255,0.98); padding: 30px; border-radius: 15px;
-            text-align: center; z-index: 1000; box-shadow: 0 10px 50px rgba(0,0,0,0.5); 
-            width: 85%; max-width: 320px;
+            text-align: center; z-index: 1000; box-shadow: 0 10px 50px rgba(0,0,0,0.2); 
+            width: 85%; max-width: 320px; border: 1px solid #eee;
         }
-        #speed-ui { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.5); color: #fff; padding: 5px 10px; border-radius: 5px; font-size: 12px; pointer-events: none; display:none; }
-        #joystick-wrapper { position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px; background: rgba(255,255,255,0.2); border-radius: 50%; display: none; z-index: 20; border: 1px solid #fff; }
-        #joystick-knob { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: #fff; border-radius: 50%; }
-        #start-btn { display: none; margin-top: 20px; padding: 15px 30px; background: #000; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; }
-        #status-text { font-size: 14px; color: #333; line-height: 1.5; }
+        #status-text { font-size: 14px; color: #333; margin-bottom: 15px; }
+        #start-btn { display: none; width: 100%; padding: 15px; background: #000; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        #speed-ui { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.5); color: #fff; padding: 5px 10px; border-radius: 5px; font-size: 12px; pointer-events: none; z-index: 10; }
+        #joystick-wrapper { position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px; background: rgba(0,0,0,0.05); border-radius: 50%; display: none; z-index: 20; border: 2px solid #ddd; }
+        #joystick-knob { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: #333; border-radius: 50%; }
+        #error-log { position: absolute; bottom: 10px; left: 10px; color: red; font-size: 10px; z-index: 2000; background: rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
+    <div id="error-log"></div>
     <div id="instructions">
-        <h2 style="margin-top:0">Art Gallery fix logic</h2>
-        <p id="status-text">Initialization...</p>
+        <h2 style="margin-top:0">Art Gallery fix number</h2>
+        <p id="status-text">Connecting to GitHub...</p>
         <button id="start-btn">ENTER GALLERY</button>
     </div>
-
     <div id="speed-ui">Speed: 1.0x</div>
     <div id="joystick-wrapper"><div id="joystick-knob"></div></div>
 
@@ -37,6 +38,11 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
+        // --- ERROR LOGGER ---
+        window.onerror = function(msg, url, line) {
+            document.getElementById('error-log').innerText = "Error: " + msg + " line: " + line;
+        };
+
         // --- CONFIG ---
         const GITHUB_USERNAME = 'komurugov';
         const REPO_NAME = 'AG';
@@ -46,15 +52,17 @@
         const BASE_MOVE_SPEED = 0.08;
 
         // --- GLOBALS ---
-        let OUTER_LIMIT = 20, INNER_LIMIT = 12; // Default fallback values
+        let OUTER_LIMIT = 20, INNER_LIMIT = 12; 
         let artPieces = [];
         let moveStartTime = null, moveState = { f: 0, r: 0 };
-        let isReady = false;
+        let isStarted = false;
 
+        // --- INITIAL SCENE SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf0f0f0);
+        scene.background = new THREE.Color(0xfafafa);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1500);
         camera.rotation.order = 'YXZ';
+        camera.position.set(0, 1.7, 0); // Temporary
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -62,42 +70,68 @@
         document.body.appendChild(renderer.domElement);
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        dirLight.position.set(10, 20, 10);
-        scene.add(dirLight);
+        const sun = new THREE.DirectionalLight(0xffffff, 0.4);
+        sun.position.set(5, 10, 7.5);
+        scene.add(sun);
 
         const loader = new THREE.TextureLoader();
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         const controls = new PointerLockControls(camera, document.body);
 
-        // --- THE BUILDER ---
-        async function init() {
+        // --- GALLERY BUILDER ---
+        async function loadGallery() {
             const status = document.getElementById('status-text');
             try {
-                status.innerText = "Fetching image list from GitHub...";
                 const res = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/`);
+                if (!res.ok) throw new Error("Check GitHub connection or Rate Limit.");
                 
-                if (!res.ok) {
-                    if(res.status === 403) throw new Error("GitHub Rate Limit exceeded. Please wait 1 hour.");
-                    throw new Error("Could not connect to GitHub.");
-                }
-
                 const data = await res.json();
                 const images = data.filter(f => f.name.match(/\.(jpg|jpeg|png|webp)$/i)).map(f => f.name);
+                
+                if(images.length === 0) throw new Error("No images found in repository.");
 
-                status.innerText = `Generating gallery for ${images.length} photos...`;
-
-                const ipw = Math.ceil(images.length / 4) || 1;
+                const ipw = Math.ceil(images.length / 4);
                 const wallLength = Math.max(25, (ipw + 1) * PHOTO_SPACING);
                 
                 OUTER_LIMIT = wallLength / 2;
                 INNER_LIMIT = OUTER_LIMIT - HALLWAY_WIDTH;
 
-                // Build architecture
-                buildWalls(wallLength);
-                buildInfiniteWing();
+                // Build Core
+                const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+                const buildWall = (w, x, z, r) => {
+                    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 6), wallMat);
+                    m.position.set(x, 3, z); m.rotation.y = r; scene.add(m);
+                };
 
-                // Place art
+                // Outer
+                buildWall(wallLength, 0, -OUTER_LIMIT, 0);
+                buildWall(wallLength, 0, OUTER_LIMIT, 0);
+                buildWall(wallLength, -OUTER_LIMIT, 0, Math.PI/2);
+                // East wall door gap
+                const side = (wallLength - 4) / 2;
+                buildWall(side, OUTER_LIMIT, -wallLength/2 + side/2, Math.PI/2);
+                buildWall(side, OUTER_LIMIT, wallLength/2 - side/2, Math.PI/2);
+
+                // Inner
+                const inS = wallLength - (HALLWAY_WIDTH * 2);
+                buildWall(inS, 0, -INNER_LIMIT, 0); buildWall(inS, 0, INNER_LIMIT, 0);
+                buildWall(inS, -INNER_LIMIT, 0, Math.PI/2); buildWall(inS, INNER_LIMIT, 0, Math.PI/2);
+
+                // Infinite Wing
+                buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, -2, 0);
+                buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, 2, 0);
+                const f2 = new THREE.Mesh(new THREE.PlaneGeometry(INFINITE_LEN, 4), new THREE.MeshStandardMaterial({color:0xdddddd}));
+                f2.rotation.x = -Math.PI/2; f2.position.set(OUTER_LIMIT + INFINITE_LEN/2, 0.01, 0); scene.add(f2);
+                
+                // Add empty canvases to wing
+                for(let j=0; j<40; j++) {
+                    const x = OUTER_LIMIT + 5 + (j*12);
+                    const c = new THREE.Mesh(new THREE.PlaneGeometry(2, 2.5), new THREE.MeshStandardMaterial({color:0xffffff, emissive:0xffffff, emissiveIntensity:0.1}));
+                    c.position.set(x, 2.2, -1.98); scene.add(c);
+                    const c2 = c.clone(); c2.position.z = 1.98; c2.rotation.y = Math.PI; scene.add(c2);
+                }
+
+                // Place Photos
                 images.forEach((file, i) => {
                     const wallIdx = Math.floor(i / ipw);
                     const posInWall = (i % ipw) - (ipw - 1) / 2;
@@ -111,68 +145,29 @@
                     
                     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 3.5), new THREE.MeshStandardMaterial({ color: 0xcccccc }));
                     mesh.position.set(x, 2.3, z); mesh.rotation.y = rot; scene.add(mesh);
-                    const spot = new THREE.PointLight(0xffffff, 0, 12);
+                    const spot = new THREE.PointLight(0xffffff, 0, 10);
                     spot.position.set(x + Math.sin(rot)*2, 4, z + Math.cos(rot)*2); scene.add(spot);
                     artPieces.push({ file, mesh, light: spot, isLoaded: false });
                 });
 
-                camera.position.set(0, 1.7, -OUTER_LIMIT + (HALLWAY_WIDTH / 2));
-                
-                status.innerText = "Gallery ready!";
+                // Set floor
+                const floor = new THREE.Mesh(new THREE.PlaneGeometry(wallLength*3, wallLength*3), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
+                floor.rotation.x = -Math.PI/2; scene.add(floor);
+
+                camera.position.set(0, 1.7, -OUTER_LIMIT + 4);
+                status.innerText = images.length + " photos loaded. Door is on the right.";
                 document.getElementById('start-btn').style.display = 'block';
-                isReady = true;
-                animate(); // Only start the loop now
+                
             } catch (err) {
-                status.style.color = "red";
-                status.innerText = "CRITICAL ERROR: " + err.message;
-                console.error(err);
+                status.innerText = "Error: " + err.message;
             }
         }
 
-        function createWall(w, h, x, z, r) {
-            if (w <= 0) return;
-            const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
-            m.position.set(x, h/2, z); m.rotation.y = r; scene.add(m);
-        }
-
-        function buildWalls(size) {
-            createWall(size, 6, 0, -OUTER_LIMIT, 0);
-            createWall(size, 6, 0, OUTER_LIMIT, 0);
-            createWall(size, 6, -OUTER_LIMIT, 0, Math.PI/2);
-            // East Door
-            const gap = 4;
-            const side = (size - gap) / 2;
-            createWall(side, 6, OUTER_LIMIT, -size/2 + side/2, Math.PI/2);
-            createWall(side, 6, OUTER_LIMIT, size/2 - side/2, Math.PI/2);
-            // Inner
-            const inS = size - (HALLWAY_WIDTH * 2);
-            createWall(inS, 6, 0, -INNER_LIMIT, 0); createWall(inS, 6, 0, INNER_LIMIT, 0);
-            createWall(inS, 6, -INNER_LIMIT, 0, Math.PI/2); createWall(inS, 6, INNER_LIMIT, 0, Math.PI/2);
-            // Floor
-            const f = new THREE.Mesh(new THREE.PlaneGeometry(size*2.5, size*2.5), new THREE.MeshStandardMaterial({ color: 0xdddddd }));
-            f.rotation.x = -Math.PI/2; scene.add(f);
-        }
-
-        function buildInfiniteWing() {
-            const w = 4, start = OUTER_LIMIT;
-            createWall(INFINITE_LEN, 6, start + INFINITE_LEN/2, -w/2, 0);
-            createWall(INFINITE_LEN, 6, start + INFINITE_LEN/2, w/2, 0);
-            const f = new THREE.Mesh(new THREE.PlaneGeometry(INFINITE_LEN, w), new THREE.MeshStandardMaterial({color:0xcccccc}));
-            f.rotation.x = -Math.PI/2; f.position.set(start + INFINITE_LEN/2, 0.01, 0); scene.add(f);
-            for(let i=0; i < 50; i++) {
-                const x = start + 5 + (i * 10);
-                const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2.5), new THREE.MeshStandardMaterial({color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.1}));
-                m.position.set(x, 2.2, -w/2 + 0.02); scene.add(m);
-                const m2 = m.clone(); m2.position.z = w/2 - 0.02; m2.rotation.y = Math.PI; scene.add(m2);
-            }
-        }
-
-        // --- ANIMATION & OPTIMIZATION ---
+        // --- ANIMATION ENGINE ---
         function animate() {
-            if (!isReady) return;
             requestAnimationFrame(animate);
-
-            if (moveState.f !== 0 || moveState.r !== 0) {
+            
+            if (isStarted && (moveState.f !== 0 || moveState.r !== 0)) {
                 if (moveStartTime === null) moveStartTime = performance.now();
                 const mult = Math.min(3, 1 + ((performance.now() - moveStartTime)/2000)*2);
                 const speed = BASE_MOVE_SPEED * mult;
@@ -186,32 +181,29 @@
 
                 const absX = Math.abs(nextPos.x), absZ = Math.abs(nextPos.z);
                 const inRing = ((absX > INNER_LIMIT && absX < OUTER_LIMIT) || (absZ > INNER_LIMIT && absZ < OUTER_LIMIT)) && absX < OUTER_LIMIT + 0.1 && absZ < OUTER_LIMIT + 0.1;
-                const inInfinite = nextPos.x > OUTER_LIMIT && Math.abs(nextPos.z) < 1.8 && nextPos.x < OUTER_LIMIT + INFINITE_LEN;
+                const inWing = nextPos.x > OUTER_LIMIT && Math.abs(nextPos.z) < 1.8 && nextPos.x < OUTER_LIMIT + INFINITE_LEN;
                 
-                if (inRing || inInfinite) { camera.position.copy(nextPos); }
+                if (inRing || inWing) { camera.position.copy(nextPos); }
 
-                // Optimization: Update art
+                // Texture Loader
                 artPieces.forEach(art => {
-                    const dist = camera.position.distanceTo(art.mesh.position);
-                    if (dist < 15 && !art.isLoaded) {
+                    const d = camera.position.distanceTo(art.mesh.position);
+                    if (d < 15 && !art.isLoaded) {
                         art.isLoaded = true;
-                        loader.load(art.file, (tex) => {
-                            art.mesh.material.map = tex; art.mesh.material.color.set(0xffffff);
-                            art.mesh.material.needsUpdate = true; art.light.intensity = 8;
-                        });
-                    } else if (dist > 30 && art.isLoaded) {
+                        loader.load(art.file, (t) => { art.mesh.material.map = t; art.mesh.material.needsUpdate = true; art.light.intensity = 8; });
+                    } else if (d > 30 && art.isLoaded) {
                         art.isLoaded = false; art.light.intensity = 0;
-                        if (art.mesh.material.map) { art.mesh.material.map.dispose(); art.mesh.material.map = null; art.mesh.material.color.set(0xcccccc); art.mesh.material.needsUpdate = true; }
+                        if(art.mesh.material.map) { art.mesh.material.map.dispose(); art.mesh.material.map = null; art.mesh.material.needsUpdate = true; }
                     }
                 });
             }
             renderer.render(scene, camera);
         }
 
-        // --- INPUTS ---
+        // --- EVENTS ---
         document.getElementById('start-btn').addEventListener('click', () => {
+            isStarted = true;
             document.getElementById('instructions').style.display = 'none';
-            document.getElementById('speed-ui').style.display = 'block';
             if (!isMobile) controls.lock();
             else document.getElementById('joystick-wrapper').style.display = 'block';
         });
@@ -220,4 +212,26 @@
         window.addEventListener('keyup', (e) => { if (['KeyW', 'KeyS'].includes(e.code)) moveState.f = 0; if (['KeyA', 'KeyD'].includes(e.code)) moveState.r = 0; if (moveState.f === 0 && moveState.r === 0) moveStartTime = null; });
         
         let lx=null, ly=null, jA=false, jS={x:0,y:0};
-        document
+        document.addEventListener('touchstart', (e) => { const t=e.touches[0]; if (t.clientX < 150) { jA=true; jS={x:t.clientX,y:t.clientY}; } else { lx=t.clientX; ly=t.clientY; } });
+        document.addEventListener('touchmove', (e) => {
+            const t = Array.from(e.touches).find(u => u.clientX > 150) || e.touches[0];
+            if (jA && t.clientX < window.innerWidth/2) {
+                moveState.f = -((t.clientY - jS.y)/40); moveState.r = (t.clientX - jS.x)/40;
+                document.getElementById('joystick-knob').style.transform = `translate(${moveState.r*20}px, ${-moveState.f*20}px)`;
+            } else if (lx !== null) {
+                // Inversed Horizontal + Vertical Look
+                camera.rotation.y += (t.clientX - lx) * 0.007;
+                camera.rotation.x += (t.clientY - ly) * 0.007;
+                camera.rotation.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, camera.rotation.x));
+                lx=t.clientX; ly=t.clientY;
+            }
+        });
+        document.addEventListener('touchend', () => { jA=false; moveState.f=0; moveState.r=0; lx=null; ly=null; document.getElementById('joystick-knob').style.transform='translate(0,0)'; });
+
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+        loadGallery();
+        animate();
+    </script>
+</body>
+</html>
