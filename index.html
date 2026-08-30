@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Art Gallery - Final Fix</title>
+    <title>Minimalist 3D Gallery</title>
     <style>
         body { margin: 0; overflow: hidden; background: #ffffff; font-family: sans-serif; touch-action: none; }
         #instructions {
@@ -23,9 +23,9 @@
 </head>
 <body>
     <div id="instructions">
-        <h2>Gallery Ready 0734</h2>
+        <h2>Gallery Ready</h2>
         <p>Walk with WASD/Joystick<br>Look by Dragging</p>
-        <button id="start-btn" style="padding: 12px 24px; background: #000; color: #fff; border: none; border-radius: 5px; cursor: pointer;">ENTER GALLERY</button>
+        <button id="start-btn" style="padding: 12px 24px; background: #000; color: #fff; border: none; border-radius: 5px; cursor: pointer;">ENTER</button>
     </div>
     <div id="joystick-wrapper"><div id="joystick-knob"></div></div>
 
@@ -37,9 +37,7 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-        // --- 1. CONFIG ---
         const MOVE_SPEED = 0.06; 
-        const GALLERY_SIZE = 15; // The center of the corridor
         const WALL_HEIGHT = 5;
 
         const scene = new THREE.Scene();
@@ -47,8 +45,6 @@
         scene.fog = new THREE.Fog(0xffffff, 0, 50);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // FIX: Start inside the corridor (Z = -15) facing the outer wall (Z = -17)
         camera.position.set(0, 1.7, -14.5); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -59,7 +55,6 @@
         const light = new THREE.AmbientLight(0xffffff, 1.0);
         scene.add(light);
 
-        // --- 2. CONTROLS ---
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         const controls = new PointerLockControls(camera, document.body);
         
@@ -69,16 +64,14 @@
             if (isMobile) document.getElementById('joystick-wrapper').style.display = 'block';
         });
 
-        // --- 3. ARCHITECTURE ---
         const loader = new THREE.TextureLoader();
 
-        // Floor & Visible Grid
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0xfcfcfc }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
 
         const grid = new THREE.GridHelper(100, 50, 0xcccccc, 0xeeeeee);
-        grid.position.y = 0.02; // Lifted so it doesn't flicker
+        grid.position.y = 0.02;
         scene.add(grid);
 
         function createWall(w, h, x, z, rot = 0) {
@@ -87,18 +80,15 @@
             mesh.rotation.y = rot;
             scene.add(mesh);
         }
-        // Outer Walls (at +/- 17)
         createWall(40, WALL_HEIGHT, 0, -17);
         createWall(40, WALL_HEIGHT, 0, 17);
         createWall(40, WALL_HEIGHT, -17, 0, Math.PI/2);
         createWall(40, WALL_HEIGHT, 17, 0, -Math.PI/2);
-        // Inner Walls (at +/- 13)
         createWall(26, WALL_HEIGHT, 0, -13);
         createWall(26, WALL_HEIGHT, 0, 13);
         createWall(26, WALL_HEIGHT, -13, 0, Math.PI/2);
         createWall(26, WALL_HEIGHT, 13, 0, -Math.PI/2);
 
-        // --- 4. ART LOADING ---
         function placeArt(file, x, z, rotationY) {
             loader.load(file, (texture) => {
                 const artGeo = new THREE.PlaneGeometry(2.8, 3.8);
@@ -108,24 +98,15 @@
                 mesh.rotation.y = rotationY;
                 scene.add(mesh);
 
-                // Frame
-                const frame = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 4.0), new THREE.MeshBasicMaterial({color: 0x000000}));
-                frame.position.set(x, 2.3, z - 0.01);
-                frame.rotation.y = rotationY;
-                scene.add(frame);
-
-                // Add a bright spotlight right in front of the art
-                const spot = new THREE.PointLight(0xffffff, 15, 10);
+                const spot = new THREE.PointLight(0xffffff, 8, 10);
                 spot.position.set(x, 3.5, z + (rotationY === 0 ? 1.5 : -1.5));
                 scene.add(spot);
             });
         }
 
-        // PLACING YOUR PHOTO ON THE OUTER WALL
-        // Note: Filename must be exactly as it appears in GitHub
-        placeArt('./20250914_160755.jpg', 0, -16.95, 0);
+        // --- ADD YOUR PHOTOS HERE ---
+        placeArt('20250914_160755.jpg', 0, -16.98, 0);
 
-        // --- 5. MOVEMENT ENGINE ---
         let moveState = { f: 0, r: 0 };
         window.addEventListener('keydown', (e) => {
             if (e.code === 'KeyW') moveState.f = 1;
@@ -138,7 +119,6 @@
             if (['KeyA', 'KeyD'].includes(e.code)) moveState.r = 0;
         });
 
-        // Mobile Controls
         let joystickActive = false;
         let joystickStart = { x: 0, y: 0 };
         document.addEventListener('touchstart', (e) => {
@@ -181,7 +161,6 @@
                 nextPos.addScaledVector(dir, moveState.f * MOVE_SPEED);
                 nextPos.addScaledVector(side, -moveState.r * MOVE_SPEED);
 
-                // COLLISION FIX: Keep camera strictly inside the corridor bounds (13.5 to 16.5)
                 const absX = Math.abs(nextPos.x);
                 const absZ = Math.abs(nextPos.z);
                 const isCorrectZone = (absX > 13.5 && absX < 16.5) || (absZ > 13.5 && absZ < 16.5);
