@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Gallery - Frustum Optimized</title>
+    <title>3D Gallery - Wide Infinite Wing</title>
     <style>
         body { margin: 0; overflow: hidden; background: #fafafa; font-family: sans-serif; touch-action: none; }
         #instructions {
@@ -23,7 +23,7 @@
 <body>
     <div id="error-log"></div>
     <div id="instructions">
-        <h2 style="margin-top:0">Julye4ka Art Gallery</h2>
+        <h2 style="margin-top:0">Julya Art Gallery</h2>
         <p id="status-text">Scanning for photos...</p>
         <button id="start-btn">ENTER GALLERY</button>
     </div>
@@ -38,14 +38,17 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
+        // Error Logging
         window.onerror = (msg, url, line) => {
             document.getElementById('error-log').innerText = `Error: ${msg} [Line: ${line}]`;
         };
 
+        // --- CONFIGURATION ---
         const GITHUB_USERNAME = 'komurugov';
         const REPO_NAME = 'AG';
         const PHOTO_SPACING = 3.5; 
-        const HALLWAY_WIDTH = 8.0;
+        const HALLWAY_WIDTH = 8.0;  // Main Gallery Width
+        const WING_WIDTH = 8.0;     // MATCHED: Infinite Wing Width
         const INFINITE_LEN = 500;
         const BASE_MOVE_SPEED = 0.08;
 
@@ -105,29 +108,38 @@
                     m.position.set(x, 3, z); m.rotation.y = r; scene.add(m);
                 };
 
+                // MAIN GALLERY WALLS
                 buildWall(wallLength, 0, -OUTER_LIMIT, 0);
                 buildWall(wallLength, 0, OUTER_LIMIT, 0);
                 buildWall(wallLength, -OUTER_LIMIT, 0, Math.PI/2);
-                const side = (wallLength - 4) / 2;
-                buildWall(side, OUTER_LIMIT, -wallLength/2 + side/2, Math.PI/2);
-                buildWall(side, OUTER_LIMIT, wallLength/2 - side/2, Math.PI/2);
+                
+                // EAST WALL with 8m DOOR GAP
+                const sideWallPart = (wallLength - WING_WIDTH) / 2;
+                buildWall(sideWallPart, 6, OUTER_LIMIT, -wallLength/2 + sideWallPart/2, Math.PI/2);
+                buildWall(sideWallPart, 6, OUTER_LIMIT, wallLength/2 - sideWallPart/2, Math.PI/2);
 
+                // INNER WALLS
                 const inS = Math.max(1, wallLength - (HALLWAY_WIDTH * 2));
                 buildWall(inS, 6, 0, -INNER_LIMIT, 0); buildWall(inS, 6, 0, INNER_LIMIT, 0);
                 buildWall(inS, 6, -INNER_LIMIT, 0, Math.PI/2); buildWall(inS, 6, INNER_LIMIT, 0, Math.PI/2);
 
-                buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, -2, 0);
-                buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, 2, 0);
-                const f2 = new THREE.Mesh(new THREE.PlaneGeometry(INFINITE_LEN, 4), new THREE.MeshStandardMaterial({color:0xdddddd}));
-                f2.rotation.x = -Math.PI/2; f2.position.set(OUTER_LIMIT + INFINITE_LEN/2, 0.01, 0); scene.add(f2);
+                // INFINITE WING (8m Wide)
+                buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, -WING_WIDTH/2, 0);
+                buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, WING_WIDTH/2, 0);
+                
+                const wingFloor = new THREE.Mesh(new THREE.PlaneGeometry(INFINITE_LEN, WING_WIDTH), new THREE.MeshStandardMaterial({color:0xdddddd}));
+                wingFloor.rotation.x = -Math.PI/2; 
+                wingFloor.position.set(OUTER_LIMIT + INFINITE_LEN/2, 0.01, 0); 
+                scene.add(wingFloor);
                 
                 for(let j=0; j<40; j++) {
                     const x = OUTER_LIMIT + 5 + (j*12);
                     const c = new THREE.Mesh(new THREE.PlaneGeometry(2, 2.5), new THREE.MeshStandardMaterial({color:0xffffff, emissive:0xffffff, emissiveIntensity:0.1}));
-                    c.position.set(x, 2.2, -1.98); scene.add(c);
-                    const c2 = c.clone(); c2.position.z = 1.98; c2.rotation.y = Math.PI; scene.add(c2);
+                    c.position.set(x, 2.2, -WING_WIDTH/2 + 0.02); scene.add(c);
+                    const c2 = c.clone(); c2.position.z = WING_WIDTH/2 - 0.02; c2.rotation.y = Math.PI; scene.add(c2);
                 }
 
+                // PLACE PHOTOS
                 images.forEach((file, i) => {
                     const wallIdx = Math.floor(i / ipw);
                     const posInWall = (i % ipw) - (ipw - 1) / 2;
@@ -147,11 +159,11 @@
                     artPieces.push({ file, mesh, light: spot, isLoaded: false });
                 });
 
-                const floor = new THREE.Mesh(new THREE.PlaneGeometry(wallLength*3, wallLength*3), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
-                floor.rotation.x = -Math.PI/2; scene.add(floor);
+                const mainFloor = new THREE.Mesh(new THREE.PlaneGeometry(wallLength*3, wallLength*3), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
+                mainFloor.rotation.x = -Math.PI/2; scene.add(mainFloor);
 
                 camera.position.set(0, 1.7, -OUTER_LIMIT + (HALLWAY_WIDTH/2));
-                status.innerText = "Ready. Room randomized.";
+                status.innerText = "Photos randomized. Wing widened.";
                 document.getElementById('start-btn').style.display = 'block';
                 
             } catch (err) { status.innerText = "Error: " + err.message; }
@@ -159,7 +171,6 @@
 
         function updateVisibility() {
             projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-            // FIX: Modern function name is setFromProjectionMatrix
             frustum.setFromProjectionMatrix(projScreenMatrix);
 
             artPieces.forEach(art => {
@@ -167,20 +178,12 @@
                 if (isVisible && !art.isLoaded) {
                     art.isLoaded = true;
                     loader.load(art.file, (t) => { 
-                        art.mesh.material.map = t; 
-                        art.mesh.material.color.set(0xffffff);
-                        art.mesh.material.needsUpdate = true; 
-                        art.light.intensity = 8; 
+                        art.mesh.material.map = t; art.mesh.material.color.set(0xffffff);
+                        art.mesh.material.needsUpdate = true; art.light.intensity = 8; 
                     });
                 } else if (!isVisible && art.isLoaded) {
-                    art.isLoaded = false; 
-                    art.light.intensity = 0;
-                    if(art.mesh.material.map) { 
-                        art.mesh.material.map.dispose(); 
-                        art.mesh.material.map = null; 
-                        art.mesh.material.color.set(0xcccccc);
-                        art.mesh.material.needsUpdate = true; 
-                    }
+                    art.isLoaded = false; art.light.intensity = 0;
+                    if(art.mesh.material.map) { art.mesh.material.map.dispose(); art.mesh.material.map = null; art.mesh.material.color.set(0xcccccc); art.mesh.material.needsUpdate = true; }
                 }
             });
         }
@@ -201,8 +204,12 @@
                     nextPos.addScaledVector(side, -moveState.r * speed);
 
                     const absX = Math.abs(nextPos.x), absZ = Math.abs(nextPos.z);
+                    
+                    // Wide Hallway Collision
                     const inRing = ((absX > INNER_LIMIT && absX < OUTER_LIMIT) || (absZ > INNER_LIMIT && absZ < OUTER_LIMIT)) && absX < OUTER_LIMIT + 0.1 && absZ < OUTER_LIMIT + 0.1;
-                    const inWing = nextPos.x > OUTER_LIMIT && Math.abs(nextPos.z) < 1.8 && nextPos.x < OUTER_LIMIT + INFINITE_LEN;
+                    
+                    // Wide Infinite Wing Collision (Width allowed up to half of WING_WIDTH)
+                    const inWing = nextPos.x > OUTER_LIMIT && Math.abs(nextPos.z) < (WING_WIDTH/2 - 0.2) && nextPos.x < OUTER_LIMIT + INFINITE_LEN;
                     
                     if (inRing || inWing) camera.position.copy(nextPos);
                 }
