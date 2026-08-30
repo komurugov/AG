@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Gallery - Wide Infinite Wing</title>
+    <title>3D Gallery - Fixed East Wall</title>
     <style>
         body { margin: 0; overflow: hidden; background: #fafafa; font-family: sans-serif; touch-action: none; }
         #instructions {
@@ -23,7 +23,7 @@
 <body>
     <div id="error-log"></div>
     <div id="instructions">
-        <h2 style="margin-top:0">Julya Art Gallery</h2>
+        <h2 style="margin-top:0">Julye4ka Art Gallery</h2>
         <p id="status-text">Scanning for photos...</p>
         <button id="start-btn">ENTER GALLERY</button>
     </div>
@@ -38,17 +38,16 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-        // Error Logging
         window.onerror = (msg, url, line) => {
             document.getElementById('error-log').innerText = `Error: ${msg} [Line: ${line}]`;
         };
 
-        // --- CONFIGURATION ---
+        // --- CONFIG ---
         const GITHUB_USERNAME = 'komurugov';
         const REPO_NAME = 'AG';
         const PHOTO_SPACING = 3.5; 
-        const HALLWAY_WIDTH = 8.0;  // Main Gallery Width
-        const WING_WIDTH = 8.0;     // MATCHED: Infinite Wing Width
+        const HALLWAY_WIDTH = 8.0;
+        const WING_WIDTH = 8.0;     
         const INFINITE_LEN = 500;
         const BASE_MOVE_SPEED = 0.08;
 
@@ -90,14 +89,13 @@
             try {
                 const res = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${REPO_NAME}/contents/`);
                 if (!res.ok) throw new Error("GitHub API Error");
-                
                 const data = await res.json();
                 let images = data.filter(f => f.name.match(/\.(jpg|jpeg|png|webp)$/i)).map(f => f.name);
                 if(images.length === 0) throw new Error("No images found.");
 
                 images = shuffle(images);
                 const ipw = Math.ceil(images.length / 4);
-                const wallLength = Math.max(25, (ipw + 1) * PHOTO_SPACING);
+                const wallLength = Math.max(30, (ipw + 1) * PHOTO_SPACING); // Increased min size
                 
                 OUTER_LIMIT = wallLength / 2;
                 INNER_LIMIT = OUTER_LIMIT - HALLWAY_WIDTH;
@@ -108,29 +106,26 @@
                     m.position.set(x, 3, z); m.rotation.y = r; scene.add(m);
                 };
 
-                // MAIN GALLERY WALLS
-                buildWall(wallLength, 0, -OUTER_LIMIT, 0);
-                buildWall(wallLength, 0, OUTER_LIMIT, 0);
-                buildWall(wallLength, -OUTER_LIMIT, 0, Math.PI/2);
+                // Walls
+                buildWall(wallLength, 0, -OUTER_LIMIT, 0); // North
+                buildWall(wallLength, 0, OUTER_LIMIT, 0);  // South
+                buildWall(wallLength, -OUTER_LIMIT, 0, Math.PI/2); // West
                 
-                // EAST WALL with 8m DOOR GAP
+                // East Wall with Door Gap
                 const sideWallPart = (wallLength - WING_WIDTH) / 2;
                 buildWall(sideWallPart, 6, OUTER_LIMIT, -wallLength/2 + sideWallPart/2, Math.PI/2);
                 buildWall(sideWallPart, 6, OUTER_LIMIT, wallLength/2 - sideWallPart/2, Math.PI/2);
 
-                // INNER WALLS
-                const inS = Math.max(1, wallLength - (HALLWAY_WIDTH * 2));
+                // Inner Walls
+                const inS = wallLength - (HALLWAY_WIDTH * 2);
                 buildWall(inS, 6, 0, -INNER_LIMIT, 0); buildWall(inS, 6, 0, INNER_LIMIT, 0);
                 buildWall(inS, 6, -INNER_LIMIT, 0, Math.PI/2); buildWall(inS, 6, INNER_LIMIT, 0, Math.PI/2);
 
-                // INFINITE WING (8m Wide)
+                // Infinite Wing
                 buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, -WING_WIDTH/2, 0);
                 buildWall(INFINITE_LEN, 6, OUTER_LIMIT + INFINITE_LEN/2, WING_WIDTH/2, 0);
-                
                 const wingFloor = new THREE.Mesh(new THREE.PlaneGeometry(INFINITE_LEN, WING_WIDTH), new THREE.MeshStandardMaterial({color:0xdddddd}));
-                wingFloor.rotation.x = -Math.PI/2; 
-                wingFloor.position.set(OUTER_LIMIT + INFINITE_LEN/2, 0.01, 0); 
-                scene.add(wingFloor);
+                wingFloor.rotation.x = -Math.PI/2; wingFloor.position.set(OUTER_LIMIT + INFINITE_LEN/2, 0.01, 0); scene.add(wingFloor);
                 
                 for(let j=0; j<40; j++) {
                     const x = OUTER_LIMIT + 5 + (j*12);
@@ -139,16 +134,24 @@
                     const c2 = c.clone(); c2.position.z = WING_WIDTH/2 - 0.02; c2.rotation.y = Math.PI; scene.add(c2);
                 }
 
-                // PLACE PHOTOS
+                // --- PLACING PHOTOS WITH DOOR AVOIDANCE ---
                 images.forEach((file, i) => {
                     const wallIdx = Math.floor(i / ipw);
                     const posInWall = (i % ipw) - (ipw - 1) / 2;
                     let x=0, z=0, rot=0;
-                    const coord = posInWall * PHOTO_SPACING;
-                    if (wallIdx === 0) { x = coord; z = -OUTER_LIMIT + 0.05; rot = 0; }
-                    else if (wallIdx === 1) { x = OUTER_LIMIT - 0.05; z = coord; rot = -Math.PI/2; }
-                    else if (wallIdx === 2) { x = -coord; z = OUTER_LIMIT - 0.05; rot = Math.PI; }
-                    else if (wallIdx === 3) { x = -OUTER_LIMIT + 0.05; z = -coord; rot = Math.PI/2; }
+                    let coord = posInWall * PHOTO_SPACING;
+
+                    if (wallIdx === 1) { // EAST WALL
+                        // If photo is in the door zone, push it to the solid wall sections
+                        const doorSafetyMargin = WING_WIDTH / 2 + 1.5;
+                        if (coord > -doorSafetyMargin && coord < 0) coord = -doorSafetyMargin - (Math.abs(coord));
+                        if (coord < doorSafetyMargin && coord >= 0) coord = doorSafetyMargin + coord;
+                        
+                        x = OUTER_LIMIT - 0.05; z = coord; rot = -Math.PI/2;
+                    } 
+                    else if (wallIdx === 0) { x = coord; z = -OUTER_LIMIT + 0.05; rot = 0; }
+                    else if (wallIdx === 2) { x = -coord; z = OUTER_LIMIT + 0.05; rot = Math.PI; }
+                    else { x = -OUTER_LIMIT + 0.05; z = -coord; rot = Math.PI/2; }
                     
                     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 3.5), new THREE.MeshStandardMaterial({ color: 0xcccccc }));
                     mesh.position.set(x, 2.3, z); mesh.rotation.y = rot; scene.add(mesh);
@@ -163,7 +166,7 @@
                 mainFloor.rotation.x = -Math.PI/2; scene.add(mainFloor);
 
                 camera.position.set(0, 1.7, -OUTER_LIMIT + (HALLWAY_WIDTH/2));
-                status.innerText = "Photos randomized. Wing widened.";
+                status.innerText = "Photos distributed. Doorway cleared.";
                 document.getElementById('start-btn').style.display = 'block';
                 
             } catch (err) { status.innerText = "Error: " + err.message; }
@@ -172,7 +175,6 @@
         function updateVisibility() {
             projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
             frustum.setFromProjectionMatrix(projScreenMatrix);
-
             artPieces.forEach(art => {
                 const isVisible = frustum.intersectsObject(art.mesh);
                 if (isVisible && !art.isLoaded) {
@@ -196,21 +198,14 @@
                     const mult = Math.min(3, 1 + ((performance.now() - moveStartTime)/2000)*2);
                     const speed = BASE_MOVE_SPEED * mult;
                     document.getElementById('speed-ui').innerText = `Speed: ${mult.toFixed(1)}x`;
-
                     const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
                     const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
                     const nextPos = camera.position.clone();
                     nextPos.addScaledVector(dir, moveState.f * speed);
                     nextPos.addScaledVector(side, -moveState.r * speed);
-
                     const absX = Math.abs(nextPos.x), absZ = Math.abs(nextPos.z);
-                    
-                    // Wide Hallway Collision
                     const inRing = ((absX > INNER_LIMIT && absX < OUTER_LIMIT) || (absZ > INNER_LIMIT && absZ < OUTER_LIMIT)) && absX < OUTER_LIMIT + 0.1 && absZ < OUTER_LIMIT + 0.1;
-                    
-                    // Wide Infinite Wing Collision (Width allowed up to half of WING_WIDTH)
                     const inWing = nextPos.x > OUTER_LIMIT && Math.abs(nextPos.z) < (WING_WIDTH/2 - 0.2) && nextPos.x < OUTER_LIMIT + INFINITE_LEN;
-                    
                     if (inRing || inWing) camera.position.copy(nextPos);
                 }
                 updateVisibility();
@@ -228,7 +223,6 @@
 
         window.addEventListener('keydown', (e) => { if (e.code === 'KeyW') moveState.f = 1; if (e.code === 'KeyS') moveState.f = -1; if (e.code === 'KeyA') moveState.r = -1; if (e.code === 'KeyD') moveState.r = 1; });
         window.addEventListener('keyup', (e) => { if (['KeyW', 'KeyS'].includes(e.code)) moveState.f = 0; if (['KeyA', 'KeyD'].includes(e.code)) moveState.r = 0; if (moveState.f === 0 && moveState.r === 0) moveStartTime = null; });
-        
         let lx=null, ly=null, jA=false, jS={x:0,y:0};
         document.addEventListener('touchstart', (e) => { const t=e.touches[0]; if (t.clientX < 150) { jA=true; jS={x:t.clientX,y:t.clientY}; } else { lx=t.clientX; ly=t.clientY; } });
         document.addEventListener('touchmove', (e) => {
@@ -245,9 +239,7 @@
         });
         document.addEventListener('touchend', () => { jA=false; moveState.f=0; moveState.r=0; lx=null; ly=null; document.getElementById('joystick-knob').style.transform='translate(0,0)'; });
         window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
-
-        loadGallery();
-        animate();
+        loadGallery(); animate();
     </script>
 </body>
 </html>
