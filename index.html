@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minimalist 3D Gallery</title>
+    <title>3D Auto-Gallery</title>
     <style>
         body { margin: 0; overflow: hidden; background: #ffffff; font-family: sans-serif; touch-action: none; }
         #instructions {
@@ -23,8 +23,8 @@
 </head>
 <body>
     <div id="instructions">
-        <h2>Gallery Ready</h2>
-        <p>Walk with WASD/Joystick<br>Look by Dragging</p>
+        <h2>Gallery Ready 0750</h2>
+        <p>Your photos have been arranged.<br>Walk with WASD/Joystick</p>
         <button id="start-btn" style="padding: 12px 24px; background: #000; color: #fff; border: none; border-radius: 5px; cursor: pointer;">ENTER</button>
     </div>
     <div id="joystick-wrapper"><div id="joystick-knob"></div></div>
@@ -37,8 +37,20 @@
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
+        // --- 1. YOUR IMAGE LIST ---
+        // Just add your filenames here as you upload them to GitHub!
+        const imageFiles = [
+            '20250914_160755.jpg',
+            '20250914_160755.jpg'
+            // 'photo2.jpg',
+            // 'photo3.jpg',
+            // Add up to 20+ here...
+        ];
+
+        // --- 2. CONFIG ---
         const MOVE_SPEED = 0.06; 
         const WALL_HEIGHT = 5;
+        const OFFSET = 16.98; // Position against the outer wall
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xffffff);
@@ -52,43 +64,41 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        const light = new THREE.AmbientLight(0xffffff, 1.0);
-        scene.add(light);
+        scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 
+        // --- 3. CONTROLS ---
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         const controls = new PointerLockControls(camera, document.body);
-        
         document.getElementById('start-btn').addEventListener('click', () => {
             if (!isMobile) controls.lock();
             document.getElementById('instructions').style.display = 'none';
             if (isMobile) document.getElementById('joystick-wrapper').style.display = 'block';
         });
 
+        // --- 4. ENVIRONMENT ---
         const loader = new THREE.TextureLoader();
-
+        
+        // Floor & Grid
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0xfcfcfc }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
-
         const grid = new THREE.GridHelper(100, 50, 0xcccccc, 0xeeeeee);
         grid.position.y = 0.02;
         scene.add(grid);
 
+        // Build Walls
         function createWall(w, h, x, z, rot = 0) {
             const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ color: 0xffffff }));
             mesh.position.set(x, h/2, z);
             mesh.rotation.y = rot;
             scene.add(mesh);
         }
-        createWall(40, WALL_HEIGHT, 0, -17);
-        createWall(40, WALL_HEIGHT, 0, 17);
-        createWall(40, WALL_HEIGHT, -17, 0, Math.PI/2);
-        createWall(40, WALL_HEIGHT, 17, 0, -Math.PI/2);
-        createWall(26, WALL_HEIGHT, 0, -13);
-        createWall(26, WALL_HEIGHT, 0, 13);
-        createWall(26, WALL_HEIGHT, -13, 0, Math.PI/2);
-        createWall(26, WALL_HEIGHT, 13, 0, -Math.PI/2);
+        createWall(40, WALL_HEIGHT, 0, -17); createWall(40, WALL_HEIGHT, 0, 17);
+        createWall(40, WALL_HEIGHT, -17, 0, Math.PI/2); createWall(40, WALL_HEIGHT, 17, 0, -Math.PI/2);
+        createWall(26, WALL_HEIGHT, 0, -13); createWall(26, WALL_HEIGHT, 0, 13);
+        createWall(26, WALL_HEIGHT, -13, 0, Math.PI/2); createWall(26, WALL_HEIGHT, 13, 0, -Math.PI/2);
 
+        // --- 5. AUTO-DISTRIBUTION LOGIC ---
         function placeArt(file, x, z, rotationY) {
             loader.load(file, (texture) => {
                 const artGeo = new THREE.PlaneGeometry(2.8, 3.8);
@@ -98,15 +108,35 @@
                 mesh.rotation.y = rotationY;
                 scene.add(mesh);
 
-                const spot = new THREE.PointLight(0xffffff, 8, 10);
-                spot.position.set(x, 3.5, z + (rotationY === 0 ? 1.5 : -1.5));
+                const spot = new THREE.PointLight(0xffffff, 7, 12);
+                // Position light slightly in front of picture
+                const lx = x + (rotationY === Math.PI/2 ? 1.5 : (rotationY === -Math.PI/2 ? -1.5 : 0));
+                const lz = z + (rotationY === 0 ? 1.5 : (rotationY === Math.PI ? -1.5 : 0));
+                spot.position.set(lx, 3.5, lz);
                 scene.add(spot);
             });
         }
 
-        // --- ADD YOUR PHOTOS HERE ---
-        placeArt('20250914_160755.jpg', 0, -16.98, 0);
+        // This loop goes through your array and places them every 6 meters
+        imageFiles.forEach((file, i) => {
+            let x = 0, z = 0, rot = 0;
+            const spacing = 6;
+            const perWall = 5; // Max 5 per wall
 
+            if (i < 5) { // North Wall
+                x = -12 + (i * spacing); z = -OFFSET; rot = 0;
+            } else if (i < 10) { // East Wall
+                x = OFFSET; z = -12 + ((i-5) * spacing); rot = -Math.PI/2;
+            } else if (i < 15) { // South Wall
+                x = 12 - ((i-10) * spacing); z = OFFSET; rot = Math.PI;
+            } else if (i < 20) { // West Wall
+                x = -OFFSET; z = 12 - ((i-15) * spacing); rot = Math.PI/2;
+            }
+            
+            placeArt(file, x, z, rot);
+        });
+
+        // --- 6. ENGINE ---
         let moveState = { f: 0, r: 0 };
         window.addEventListener('keydown', (e) => {
             if (e.code === 'KeyW') moveState.f = 1;
@@ -119,8 +149,8 @@
             if (['KeyA', 'KeyD'].includes(e.code)) moveState.r = 0;
         });
 
-        let joystickActive = false;
-        let joystickStart = { x: 0, y: 0 };
+        // Mobile Logic
+        let joystickActive = false, joystickStart = { x: 0, y: 0 };
         document.addEventListener('touchstart', (e) => {
             if (e.touches[0].clientX < 150) {
                 joystickActive = true;
@@ -128,26 +158,24 @@
             }
         });
         document.addEventListener('touchmove', (e) => {
-            if (!joystickActive) return;
-            const touch = e.touches[0];
-            moveState.f = -((touch.clientY - joystickStart.y) / 40);
-            moveState.r = (touch.clientX - joystickStart.x) / 40;
-            document.getElementById('joystick-knob').style.transform = `translate(${moveState.r*20}px, ${-moveState.f*20}px)`;
-        });
-        document.addEventListener('touchend', () => {
-            joystickActive = false; moveState.f = 0; moveState.r = 0;
-            document.getElementById('joystick-knob').style.transform = `translate(0,0)`;
-        });
-
-        let lastX = 0;
-        document.addEventListener('touchmove', (e) => {
-            const touch = e.touches[0];
-            if (touch.clientX > window.innerWidth/2 && !joystickActive) {
-                if (lastX !== 0) camera.rotation.y -= (touch.clientX - lastX) * 0.01;
-                lastX = touch.clientX;
+            if (joystickActive) {
+                const t = e.touches[0];
+                moveState.f = -((t.clientY - joystickStart.y) / 40);
+                moveState.r = (t.clientX - joystickStart.x) / 40;
+                document.getElementById('joystick-knob').style.transform = `translate(${moveState.r*20}px, ${-moveState.f*20}px)`;
+            } else {
+                const t = e.touches[0];
+                if (t.clientX > window.innerWidth/2) {
+                    if (window.lastX) camera.rotation.y -= (t.clientX - window.lastX) * 0.01;
+                    window.lastX = t.clientX;
+                }
             }
         });
-        document.addEventListener('touchend', () => lastX = 0);
+        document.addEventListener('touchend', () => { 
+            joystickActive = false; moveState.f = 0; moveState.r = 0; 
+            window.lastX = null;
+            document.getElementById('joystick-knob').style.transform = `translate(0,0)`;
+        });
 
         function animate() {
             requestAnimationFrame(animate);
@@ -156,27 +184,20 @@
                 camera.getWorldDirection(dir);
                 dir.y = 0; dir.normalize();
                 const side = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
-
                 const nextPos = camera.position.clone();
                 nextPos.addScaledVector(dir, moveState.f * MOVE_SPEED);
                 nextPos.addScaledVector(side, -moveState.r * MOVE_SPEED);
 
-                const absX = Math.abs(nextPos.x);
-                const absZ = Math.abs(nextPos.z);
-                const isCorrectZone = (absX > 13.5 && absX < 16.5) || (absZ > 13.5 && absZ < 16.5);
-                const isWithinOuter = absX < 16.5 && absZ < 16.5;
-
-                if (isCorrectZone && isWithinOuter) {
-                    camera.position.copy(nextPos);
+                const absX = Math.abs(nextPos.x), absZ = Math.abs(nextPos.z);
+                if ((absX > 13.5 && absX < 16.5) || (absZ > 13.5 && absZ < 16.5)) {
+                    if (absX < 16.5 && absZ < 16.5) camera.position.copy(nextPos);
                 }
             }
             renderer.render(scene, camera);
         }
         animate();
-
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
     </script>
